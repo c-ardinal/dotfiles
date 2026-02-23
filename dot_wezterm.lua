@@ -26,6 +26,14 @@ config.default_prog = { 'nu' }
 config.default_cursor_style = "BlinkingBar"
 -- 起動時のカレントディレクトリを /_Workspace に設定
 config.default_cwd = "/_Workspace"
+-- スクロールバックバッファを増量 (デフォルト3500行)
+config.scrollback_lines = 10000
+-- ペイン切替時にズーム状態を自動解除
+config.unzoom_on_switch_pane = true
+-- bold文字でANSI色を明るくしない (色の一貫性を保つ)
+config.bold_brightens_ansi_colors = false
+-- URL自動検出のハイライト
+config.hyperlink_rules = wezterm.default_hyperlink_rules()
 
 -- ==========================================
 -- 2. ウィンドウと外観 (Window & Appearance)
@@ -47,6 +55,11 @@ config.window_frame = {
     border_right_color = '#5A7DFF',
     border_bottom_color = '#5A7DFF',
     border_top_color = '#5A7DFF',
+}
+-- 非アクティブペインを暗くして視覚的に区別
+config.inactive_pane_hsb = {
+  saturation = 0.7,
+  brightness = 0.6,
 }
 
 -- ==========================================
@@ -91,8 +104,8 @@ config.keys = {
   { key = 'n', mods = 'LEADER', action = wezterm.action.ActivateTabRelative(1) },
   -- Ctrl+bを押した後 x で現在のペイン/タブを閉じる
   { key = 'x', mods = 'LEADER', action = wezterm.action.CloseCurrentPane{ confirm = true } },
-  -- Ctrl+bを押した後 g でタブ一覧を表示
-  { key = 'g', mods = 'LEADER|CTRL', action = wezterm.action.ShowTabNavigator },
+  -- Ctrl+bを押した後 w でタブ一覧を表示 (Tmux Prefix + w)
+  { key = 'w', mods = 'LEADER', action = wezterm.action.ShowTabNavigator },
 
   -- [ポップアップ代替]
   -- Windows環境などで os.getenv("SHELL") が nil の場合でも動くようにフォールバックを追加
@@ -123,15 +136,51 @@ config.keys = {
   },
   -- Alt + Enter : フルスクリーン切り替え (WindowsコマンドプロンプトやTeraTerm風)
   { key = 'Enter', mods = 'ALT', action = wezterm.action.ToggleFullScreen },
+
+  -- [ タブ番号で直接移動 ] (tmux: Prefix + 0-9)
+  { key = '0', mods = 'LEADER', action = wezterm.action.ActivateTab(0) },
+  { key = '1', mods = 'LEADER', action = wezterm.action.ActivateTab(1) },
+  { key = '2', mods = 'LEADER', action = wezterm.action.ActivateTab(2) },
+  { key = '3', mods = 'LEADER', action = wezterm.action.ActivateTab(3) },
+  { key = '4', mods = 'LEADER', action = wezterm.action.ActivateTab(4) },
+  { key = '5', mods = 'LEADER', action = wezterm.action.ActivateTab(5) },
+  { key = '6', mods = 'LEADER', action = wezterm.action.ActivateTab(6) },
+  { key = '7', mods = 'LEADER', action = wezterm.action.ActivateTab(7) },
+  { key = '8', mods = 'LEADER', action = wezterm.action.ActivateTab(8) },
+  { key = '9', mods = 'LEADER', action = wezterm.action.ActivateTab(9) },
+
+  -- [ Ctrl+b パススルー ] (tmux: Prefix + Prefix で実際のCtrl+bを送信)
+  { key = 'b', mods = 'LEADER|CTRL', action = wezterm.action.SendKey{ key = 'b', mods = 'CTRL' } },
+
+  -- [ 最後のタブに切替 ] (tmux: Prefix + Space)
+  { key = 'Space', mods = 'LEADER', action = wezterm.action.ActivateLastTab },
+
+  -- [ スクロールバック検索 ] (tmux: Prefix + /)
+  { key = '/', mods = 'LEADER', action = wezterm.action.Search('CurrentSelectionOrEmptyString') },
+
+  -- [ ペイン入れ替え ] (tmux: Prefix + { / })
+  { key = '{', mods = 'LEADER|SHIFT', action = wezterm.action.RotatePanes('CounterClockwise') },
+  { key = '}', mods = 'LEADER|SHIFT', action = wezterm.action.RotatePanes('Clockwise') },
+
+  -- [ QuickSelect: URL・パス・ハッシュ等を素早く選択コピー ]
+  { key = 's', mods = 'LEADER', action = wezterm.action.QuickSelect },
 }
 
 -- [ マウス操作のバインド ]
--- 右クリックでクリップボードの内容を貼り付ける
+-- 右クリック: テキスト選択中はコピー、それ以外はペースト
 config.mouse_bindings = {
   {
     event = { Down = { streak = 1, button = 'Right' } },
     mods = 'NONE',
-    action = wezterm.action.PasteFrom 'Clipboard',
+    action = wezterm.action_callback(function(window, pane)
+      local sel = window:get_selection_text_for_pane(pane)
+      if sel and sel ~= '' then
+        window:perform_action(wezterm.action.CopyTo('ClipboardAndPrimarySelection'), pane)
+        window:perform_action(wezterm.action.ClearSelection, pane)
+      else
+        window:perform_action(wezterm.action.PasteFrom('Clipboard'), pane)
+      end
+    end),
   },
   -- ドラッグ選択（左クリックを離す）した瞬間に自動でクリップボードにコピーする (TeraTerm等風)
   {
@@ -142,30 +191,7 @@ config.mouse_bindings = {
 }
 
 -- ==========================================
--- 5. 通知
--- ==========================================
-local function is_claude(pane)
-  local process = pane:get_foreground_process_info()
-  if not process or not process.argv then
-    return false
-  end
-  -- 引数に"claude"が含まれているかチェック
-  for _, arg in ipairs(process.argv) do
-    if arg:find("claude") then
-      return true
-    end
-  end
-  return false
-end
-
-wezterm.on("bell", function(window, pane)
-  if is_claude(pane) then
-    window:toast_notification("Claude Code", "Task completed", nil, 4000)
-  end
-end)
-
--- ==========================================
--- 6. プラグイン設定
+-- 5. プラグイン設定
 -- ==========================================
 -- [ sessionizer.wezterm: プロジェクト単位の瞬時ワークスペース作成 ]
 local sessionizer = wezterm.plugin.require("https://github.com/mikkasendke/sessionizer.wezterm")
@@ -264,11 +290,8 @@ config.window_decorations = "TITLE | RESIZE"
 config.window_background_opacity = 0.9
 
 -- ==========================================
--- 7. ウィンドウサイズの記憶と復元 (手動実装)
+-- 6. ウィンドウサイズの記憶と復元 (手動実装)
 -- ==========================================
-local io = require("io")
-local os = require("os")
-
 local state_file = wezterm.home_dir .. '/.wezterm_state.json'
 local f = io.open(state_file, 'r')
 if f then
@@ -297,4 +320,3 @@ wezterm.on('window-resized', function(window, pane)
 end)
 
 return config
-
