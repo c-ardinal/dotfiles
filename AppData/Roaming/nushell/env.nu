@@ -18,9 +18,8 @@
 # them for future reference.
 
 # -------------------------------------------------------------
-# Starship Prompt Initialization
+# Oh My Posh Prompt Initialization
 # -------------------------------------------------------------
-mkdir ~/.cache/starship
-starship init nu | save -f ~/.cache/starship/init.nu
-starship preset catppuccin-powerline -o ~/.config/starship_CatppuccinPowerline.toml
-$env.STARSHIP_CONFIG = ("~/.config/starship_CatppuccinPowerline.toml" | path expand)
+$env.POSH_THEME = ("~/.config/oh-my-posh.json" | path expand)
+# To regenerate init.nu after config changes, run:
+#   nu ~/.cache/oh-my-posh/gen_init.nu

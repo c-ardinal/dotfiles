@@ -22,7 +22,4 @@
 # -------------------------------------------------------------
 $env.config.shell_integration.osc133 = false
 
-# -------------------------------------------------------------
-# Starship Prompt
-# -------------------------------------------------------------
-use ~/.cache/starship/init.nu
+# Oh My Posh is loaded via vendor/autoload/oh-my-posh.nu

@@ -191,7 +191,42 @@ config.mouse_bindings = {
 }
 
 -- ==========================================
--- 5. プラグイン設定
+-- 5. 通知
+-- ==========================================
+-- ベル音を無効化 (トースト通知のみ表示)
+config.audible_bell = "Disabled"
+
+local function is_claude(pane)
+  local info = pane:get_foreground_process_info()
+  if info and info.executable then
+    -- 実行ファイルパスに"claude"が含まれているかチェック
+    if info.executable:lower():find("claude") then
+      return true
+    end
+  end
+  -- フォールバック: プロセス名でもチェック
+  local name = pane:get_foreground_process_name()
+  if name and name:lower():find("claude") then
+    return true
+  end
+  return false
+end
+
+wezterm.on("bell", function(window, pane)
+  -- プロセス名をログ出力 (デバッグ用: WezTermのDebug Overlay (Ctrl+Shift+L) で確認可能)
+  local proc_name = pane:get_foreground_process_name() or "unknown"
+  wezterm.log_info("bell event fired, process: " .. proc_name)
+
+  if is_claude(pane) then
+    window:toast_notification("Claude Code", "Task completed", nil, 4000)
+  else
+    -- デバッグ用: is_claudeがfalseの場合も通知して検証
+    window:toast_notification("WezTerm Bell", "Process: " .. proc_name, nil, 4000)
+  end
+end)
+
+-- ==========================================
+-- 6. プラグイン設定
 -- ==========================================
 -- [ sessionizer.wezterm: プロジェクト単位の瞬時ワークスペース作成 ]
 local sessionizer = wezterm.plugin.require("https://github.com/mikkasendke/sessionizer.wezterm")
@@ -290,7 +325,7 @@ config.window_decorations = "TITLE | RESIZE"
 config.window_background_opacity = 0.9
 
 -- ==========================================
--- 6. ウィンドウサイズの記憶と復元 (手動実装)
+-- 7. ウィンドウサイズの記憶と復元 (手動実装)
 -- ==========================================
 local state_file = wezterm.home_dir .. '/.wezterm_state.json'
 local f = io.open(state_file, 'r')
