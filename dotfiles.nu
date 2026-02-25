@@ -56,7 +56,7 @@ def apply_env [] {
     if $os == 'windows' {
         print "📦 PSReadLineモジュールをチェック/更新しています (Windows専用処理)..."
         # PowerShell5.1のOMPクラッシュ対策
-        ^powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null; Install-Module -Name PSReadLine -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue -WarningAction SilentlyContinue"
+        ^powershell -NoProfile -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null; Install-Module -Name PSReadLine -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue -WarningAction SilentlyContinue"
     }
 
     print "⚙️ chezmoi apply を実行中..."

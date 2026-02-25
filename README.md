@@ -9,7 +9,7 @@
 ### Windows
 
 ```powershell
-Invoke-RestMethod -Uri "https://raw.githubusercontent.com/c-ardinal/dotfiles/refs/heads/main/bootstrap.ps1" | Invoke-Expression
+$ProgressPreference = 'SilentlyContinue'; Invoke-RestMethod -Uri "https://raw.githubusercontent.com/c-ardinal/dotfiles/refs/heads/main/bootstrap.ps1" | Invoke-Expression
 ```
 
 ### Mac / Linux

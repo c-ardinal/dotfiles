@@ -1,6 +1,7 @@
 # Windows 向けの完全自動セットアップ(Bootstrap)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 
 Write-Output "🚀 Windows Bootstrap を開始します..."
 
