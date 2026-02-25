@@ -5,11 +5,18 @@ $ErrorActionPreference = "Stop"
 Write-Output "🚀 Windows Bootstrap を開始します..."
 
 # 1. 前提ツールのインストール検証
-foreach ($app in @("twpayne.chezmoi", "Nushell.Nushell", "Git.Git")) {
-    $check = winget list --id $app --exact 2>$null | Out-String
-    if (-not ($check -match $app)) {
-        Write-Output "📥 未インストールの $app を winget で導入しています..."
-        winget install --id $app --exact --silent --accept-package-agreements --accept-source-agreements
+$requiredApps = @(
+    @{ Cmd = 'chezmoi'; Id = 'twpayne.chezmoi' }
+    @{ Cmd = 'nu';      Id = 'Nushell.Nushell' }
+    @{ Cmd = 'git';     Id = 'Git.Git' }
+)
+
+foreach ($app in $requiredApps) {
+    if (-not (Get-Command $app.Cmd -ErrorAction SilentlyContinue)) {
+        Write-Output "📥 未インストールの $($app.Id) を winget で導入しています..."
+        winget install --id $app.Id --exact --silent --accept-package-agreements --accept-source-agreements
+    } else {
+        Write-Output "✨ $($app.Cmd) は既にインストールされています。"
     }
 }
 

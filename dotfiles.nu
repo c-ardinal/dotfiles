@@ -17,17 +17,16 @@ def install_apps [] {
     if $os == 'windows' {
         print "📦 Windowsパッケージ (winget) を確認中..."
         let apps = [
-            'wez.wezterm',
-            'JanDeDobbeleer.OhMyPosh'
+            { cmd: 'wezterm', id: 'wez.wezterm' }
+            { cmd: 'oh-my-posh', id: 'JanDeDobbeleer.OhMyPosh' }
         ]
         for app in $apps {
-            # Check if installed using winget list. Ignoring errors as it returns non-zero if not found.
-            let check = (do -i { winget list --id $app --exact })
+            let check = (which $app.cmd)
             if ($check | is-empty) {
-                print $"📥 インストール中: ($app)..."
-                winget install --id $app --exact --silent --accept-package-agreements --accept-source-agreements
+                print $"📥 インストール中: ($app.id)..."
+                winget install --id $app.id --exact --silent --accept-package-agreements --accept-source-agreements
             } else {
-                print $"✨ ($app) は既にインストールされています。"
+                print $"✨ ($app.cmd) は既にインストールされています。"
             }
         }
     } else if $os == 'macos' {
