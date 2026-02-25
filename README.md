@@ -4,22 +4,52 @@
 
 ## セットアップ
 
-新しいデバイスでこの dotfiles を展開する場合は、以下のコマンドを実行する。
+新しいデバイスでこの dotfiles を展開する場合、OS ごとに以下の 1 コマンドを実行するだけで、必要なツールのインストールから設定まで全て全自動で行う。
 
 ### Windows
 
 ```powershell
-winget install twpayne.chezmoi
-chezmoi init --apply c-ardinal
+Invoke-RestMethod -Uri "https://raw.githubusercontent.com/c-ardinal/dotfiles/refs/heads/main/bootstrap.ps1" | Invoke-Expression
 ```
 
 ### Mac / Linux
 
 ```bash
-sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply c-ardinal
+curl -fsLS https://raw.githubusercontent.com/c-ardinal/dotfiles/refs/heads/main/bootstrap.sh | bash
 ```
 
-> **Note:** すでに chezmoi がインストールされている場合は、OS問わず `chezmoi init --apply c-ardinal` を実行する。
+---
+
+## 統合管理スクリプト (`dotfiles.nu`) について
+
+OS ごとの差異を吸収するため、インストール・適用・収集のロジックはすべて **Nushell** のスクリプト (`dotfiles.nu`) に一元化する。
+
+どの OS からでも、`nu dotfiles.nu <action>` を実行するだけで共通の管理が可能。
+
+### 1. アプリケーション・依存ファイルのインストール
+
+WezTerm, Oh My Posh などの依存アプリケーションが未インストールの場合は一括インストールを実行。
+加えて、`PSReadLine` の自動アップデート処理や `nu_scripts` のクローンなどもこの段階で行う。
+
+```bash
+nu dotfiles.nu install
+```
+
+### 2. 環境の適用 (Apply)
+
+chezmoi を使用して設定ファイルを配置・同期します。
+
+```bash
+nu dotfiles.nu apply
+```
+
+### 3. 環境の収集 (Collect)
+
+管理対象となっている各設定ファイルの最新の実体を、chezmoi のリポジトリ内に安全に再収集(`re-add`)します。
+
+```bash
+nu dotfiles.nu collect
+```
 
 ---
 
