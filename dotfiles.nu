@@ -38,7 +38,7 @@ def install_apps [] {
     }
 
     # 共通処理: nu_scripts のクローン
-    let nu_scripts_dir = ($nu.home-path | path join ".local" "share" "nu_scripts")
+    let nu_scripts_dir = (("~" | path expand) | path join ".local" "share" "nu_scripts")
     if not ($nu_scripts_dir | path exists) {
         print "📦 nushell/nu_scripts をクローンしています..."
         git clone --depth 1 https://github.com/nushell/nu_scripts.git $nu_scripts_dir
@@ -56,7 +56,7 @@ def apply_env [] {
     if $os == 'windows' {
         print "📦 PSReadLineモジュールをチェック/更新しています (Windows専用処理)..."
         # PowerShell5.1のOMPクラッシュ対策
-        ^powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue | Out-Null; Install-Module -Name PSReadLine -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue"
+        ^powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ErrorAction SilentlyContinue -WarningAction SilentlyContinue | Out-Null; Install-Module -Name PSReadLine -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue -WarningAction SilentlyContinue"
     }
 
     print "⚙️ chezmoi apply を実行中..."
@@ -74,7 +74,7 @@ def collect_env [] {
     
     for file in $files {
         print $"  -> collect: ($file)"
-        let abs_path = ($nu.home-path | path join $file)
+        let abs_path = (("~" | path expand) | path join $file)
         if ($abs_path | path exists) {
             chezmoi re-add $abs_path
         } else {
