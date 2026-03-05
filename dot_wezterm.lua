@@ -188,6 +188,12 @@ config.mouse_bindings = {
     mods = 'NONE',
     action = wezterm.action.CompleteSelection 'Clipboard',
   },
+  -- Ctrl + 左クリックで、マウスカーソル下のリンクを開く
+  {
+    event = { Up = { streak = 1, button = 'Left' } },
+    mods = 'CTRL',
+    action = wezterm.action.OpenLinkAtMouseCursor,
+  },
 }
 
 -- ==========================================
@@ -243,6 +249,7 @@ smart_splits.apply_to_config(config, {
     resize = 'META',  -- Alt + hjklでサイズ変更
   },
 })
+
 
 -- [tabline.wez: タブラインのカスタマイズ]
 local tabline = wezterm.plugin.require("https://github.com/michaelbrusegard/tabline.wez")
@@ -325,32 +332,199 @@ config.window_decorations = "TITLE | RESIZE"
 config.window_background_opacity = 0.9
 
 -- ==========================================
--- 7. ウィンドウサイズの記憶と復元 (手動実装)
+-- 7. ウィンドウレイアウトの記憶と復元 (自前実装)
 -- ==========================================
-local state_file = wezterm.home_dir .. '/.wezterm_state.json'
-local f = io.open(state_file, 'r')
-if f then
-  local content = f:read('*a')
-  f:close()
-  local success, parsed = pcall(wezterm.json_parse, content)
-  if success and parsed and parsed.cols and parsed.rows then
-    -- 前回のウィンドウの列数と行数を初期サイズとして復元
-    config.initial_cols = parsed.cols
-    config.initial_rows = parsed.rows
+-- プラグイン不要。ウィンドウサイズ + タブ構成 + ペイン分割比率 + 各ペインCWD を
+-- JSONファイルに保存し、次回起動時に gui-startup で復元する。
+-- 30秒ごとの定期保存で終了直前の状態も捕捉する。
+
+local layout_file = wezterm.home_dir .. '/.wezterm_layout.json'
+local DEFAULT_CWD = '/_Workspace'
+
+-- ペイン座標リストからバイナリツリーを再帰的に構築
+-- ※ panes_with_info() の left, top, width, height から分割方向・比率を逆算する
+local function build_pane_tree(panes_info, bounds)
+  if #panes_info == 0 then return nil end
+
+  -- 単一ペイン → リーフノード
+  if #panes_info == 1 then
+    local p = panes_info[1]
+    local cwd_url = p.pane:get_current_working_dir()
+    local cwd = cwd_url and cwd_url.file_path or nil
+    if cwd then cwd = cwd:gsub('^/(%a):', '%1:') end  -- Windows パス修正: /C: → C:
+    return { cwd = cwd or DEFAULT_CWD }
+  end
+
+  -- 座標順にソート (左上が先頭)
+  table.sort(panes_info, function(a, b)
+    if a.left == b.left then return a.top < b.top end
+    return a.left < b.left
+  end)
+
+  -- 全ペインの外接矩形を算出
+  if not bounds then
+    local max_r, max_b = 0, 0
+    for _, p in ipairs(panes_info) do
+      max_r = math.max(max_r, p.left + p.width)
+      max_b = math.max(max_b, p.top + p.height)
+    end
+    bounds = { left = 0, top = 0, right = max_r, bottom = max_b }
+  end
+
+  local first = panes_info[1]
+  local total_w = bounds.right - bounds.left
+  local total_h = bounds.bottom - bounds.top
+
+  -- 縦分割 (左|右) を検出: 先頭ペインの幅が全幅に満たない場合
+  if first.left + first.width < bounds.right then
+    local split_x = first.left + first.width + 1  -- +1 はセパレータ
+    local left_g, right_g = {}, {}
+    for _, p in ipairs(panes_info) do
+      if p.left < split_x then table.insert(left_g, p)
+      else table.insert(right_g, p) end
+    end
+    if #right_g > 0 then
+      return {
+        direction = 'Right',
+        size = (bounds.right - split_x) / total_w,
+        first  = build_pane_tree(left_g,  { left = bounds.left, top = bounds.top, right = split_x - 1, bottom = bounds.bottom }),
+        second = build_pane_tree(right_g, { left = split_x,     top = bounds.top, right = bounds.right, bottom = bounds.bottom }),
+      }
+    end
+  end
+
+  -- 横分割 (上/下) を検出: 先頭ペインの高さが全高に満たない場合
+  if first.top + first.height < bounds.bottom then
+    local split_y = first.top + first.height + 1
+    local top_g, bottom_g = {}, {}
+    for _, p in ipairs(panes_info) do
+      if p.top < split_y then table.insert(top_g, p)
+      else table.insert(bottom_g, p) end
+    end
+    if #bottom_g > 0 then
+      return {
+        direction = 'Bottom',
+        size = (bounds.bottom - split_y) / total_h,
+        first  = build_pane_tree(top_g,    { left = bounds.left, top = bounds.top,  right = bounds.right, bottom = split_y - 1 }),
+        second = build_pane_tree(bottom_g, { left = bounds.left, top = split_y,     right = bounds.right, bottom = bounds.bottom }),
+      }
+    end
+  end
+
+  -- フォールバック: 単一ペインとして返す
+  local cwd_url = first.pane:get_current_working_dir()
+  local cwd = cwd_url and cwd_url.file_path or nil
+  if cwd then cwd = cwd:gsub('^/(%a):', '%1:') end
+  return { cwd = cwd or DEFAULT_CWD }
+end
+
+-- ツリーの先頭リーフのCWDを取得 (spawn_window / split の cwd 引数に使用)
+local function get_first_cwd(node)
+  if not node then return nil end
+  if node.cwd then return node.cwd end
+  if node.first then return get_first_cwd(node.first) end
+  return nil
+end
+
+-- 現在のレイアウト状態をJSONファイルへ保存
+local function save_layout()
+  local ok, err = pcall(function()
+    local all_wins = wezterm.mux.all_windows()
+    if #all_wins == 0 then return end
+    local win = all_wins[1]  -- 最初のウィンドウのみ対象
+    local tabs = win:tabs()
+    if #tabs == 0 then return end
+
+    -- ウィンドウの総サイズを算出 (最初のタブの全ペイン座標から)
+    local first_panes = tabs[1]:panes_with_info()
+    local total_cols, total_rows = 0, 0
+    for _, p in ipairs(first_panes) do
+      total_cols = math.max(total_cols, p.left + p.width)
+      total_rows = math.max(total_rows, p.top + p.height)
+    end
+
+    -- 各タブのペイン構成をツリー化
+    local tabs_state = {}
+    for _, tab in ipairs(tabs) do
+      local panes = tab:panes_with_info()
+      if #panes > 0 then
+        table.insert(tabs_state, build_pane_tree(panes))
+      end
+    end
+
+    if #tabs_state > 0 then
+      local fh = io.open(layout_file, 'w')
+      if fh then
+        fh:write(wezterm.json_encode({
+          cols = total_cols,
+          rows = total_rows,
+          tabs = tabs_state,
+        }))
+        fh:close()
+      end
+    end
+  end)
+  if not ok then
+    wezterm.log_warn('layout save failed: ' .. tostring(err))
   end
 end
 
-wezterm.on('window-resized', function(window, pane)
-  if pane then
-    local p_dims = pane:get_dimensions()
-    local f = io.open(state_file, 'w')
-    if f then
-      f:write(wezterm.json_encode({
-        cols = p_dims.cols,
-        rows = p_dims.viewport_rows
-      }))
-      f:close()
+-- 5秒ごとの定期保存
+-- ※ WezTermに終了前フック(shutdown event)は存在しないため、短い間隔で補う。
+--   保存データは数百バイトのJSONなので I/O 負荷はほぼゼロ。
+local function periodic_save()
+  wezterm.time.call_after(5, function()
+    save_layout()
+    periodic_save()
+  end)
+end
+periodic_save()
+
+-- ペインの分割を再帰的に復元
+local function restore_splits(node, pane)
+  if not node or not node.direction then return end
+  local second_cwd = get_first_cwd(node.second) or DEFAULT_CWD
+  local new_pane = pane:split {
+    direction = node.direction,
+    size = node.size,
+    cwd = second_cwd,
+  }
+  restore_splits(node.first, pane)       -- 左/上 (元のペイン)
+  restore_splits(node.second, new_pane)  -- 右/下 (新しいペイン)
+end
+
+-- 起動時にレイアウトを自動復元
+wezterm.on('gui-startup', function(cmd)
+  local fh = io.open(layout_file, 'r')
+  if not fh then
+    -- 状態ファイルがない場合はデフォルトで起動
+    wezterm.mux.spawn_window { cwd = DEFAULT_CWD, args = cmd and cmd.args or nil }
+    return
+  end
+  local content = fh:read('*a')
+  fh:close()
+
+  local ok, state = pcall(wezterm.json_parse, content)
+  if not ok or not state or not state.tabs or #state.tabs == 0 then
+    wezterm.mux.spawn_window { cwd = DEFAULT_CWD, args = cmd and cmd.args or nil }
+    return
+  end
+
+  local window
+  for i, tab_layout in ipairs(state.tabs) do
+    local first_cwd = get_first_cwd(tab_layout) or DEFAULT_CWD
+    local tab, pane
+    if i == 1 then
+      tab, pane, window = wezterm.mux.spawn_window {
+        width = state.cols,
+        height = state.rows,
+        cwd = first_cwd,
+        args = cmd and cmd.args or nil,
+      }
+    else
+      tab, pane = window:spawn_tab { cwd = first_cwd }
     end
+    restore_splits(tab_layout, pane)
   end
 end)
 
