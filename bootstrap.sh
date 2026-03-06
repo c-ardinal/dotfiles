@@ -4,30 +4,43 @@ set -e
 
 echo "🚀 Unix Bootstrap を開始します..."
 
-# 1. 依存(Nushell, Chezmoi, Git) のインストール (Homebrew 利用想定)
+# 1. Homebrew の確認
 if ! command -v brew >/dev/null 2>&1; then
     echo "❌ brew (Homebrew) が見つかりません。先に Homebrew をインストールしてください。"
+    echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
     exit 1
 fi
 
-for app in chezmoi nushell git; do
-    if ! command -v $app >/dev/null 2>&1; then
-        echo "📥 brew $app をインストールしています..."
-        brew install $app
+# 2. 依存ツールのインストール
+# formula名とCLIバイナリ名が異なるものがあるためマッピング
+declare -A bin_map=( ["chezmoi"]="chezmoi" ["nushell"]="nu" ["git"]="git" )
+
+for formula in chezmoi nushell git; do
+    bin="${bin_map[$formula]}"
+    if command -v "$bin" >/dev/null 2>&1; then
+        echo "✅ $formula ($bin) は既にインストール済みです"
+    else
+        echo "📥 $formula をインストールしています..."
+        # ソースビルド(cargo install等)を回避し、プリビルトbottleのみ使用
+        if ! brew install --no-build-from-source "$formula" 2>/dev/null; then
+            echo "⚠️  bottle が見つかりません。通常の brew install を試みます..."
+            brew install "$formula"
+        fi
     fi
 done
 
-# 2. リポジトリの初期化
+# 3. リポジトリの初期化
 CHEZMOI_DIR="$HOME/.local/share/chezmoi"
 if [ ! -d "$CHEZMOI_DIR" ]; then
     echo "📥 chezmoi リポジトリ (c-ardinal/dotfiles) を取得しています..."
     chezmoi init c-ardinal
 fi
 
-# 3. Nushell スクリプトへバトンタッチ
+# 4. Nushell スクリプトへバトンタッチ
 cd "$CHEZMOI_DIR"
-echo "⚙️ Nushsell オーケストレーターに処理を委譲します..."
+echo "⚙️ Nushell オーケストレーターに処理を委譲します..."
 nu ./dotfiles.nu install
 nu ./dotfiles.nu apply
 
 echo "🎉 Bootstrap が完全に終了しました！ 新しいターミナルを開いてください。"
+
