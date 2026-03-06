@@ -60,7 +60,7 @@ def apply_env [] {
     }
 
     print "⚙️ chezmoi apply を実行中..."
-    chezmoi apply
+    chezmoi apply --force
 
     print "✅ Apply が完了しました！"
 }
