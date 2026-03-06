@@ -7,6 +7,8 @@
 # --- Windows 以外では不要 ---
 {{ if ne .chezmoi.os "windows" }}
 AppData
+Documents
+dot_cache
 bootstrap.ps1
 {{ end }}
 
