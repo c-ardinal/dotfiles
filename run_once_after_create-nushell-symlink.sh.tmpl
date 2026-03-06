@@ -1,0 +1,34 @@
+{{ if eq .chezmoi.os "darwin" -}}
+#!/bin/sh
+# macOS: Nushell config symlink
+# Nushell on macOS uses ~/Library/Application Support/nushell/ by default.
+# chezmoi deploys to ~/.config/nushell/ so we create a symlink.
+
+set -e
+
+CANONICAL="$HOME/.config/nushell"
+MACOS_DIR="$HOME/Library/Application Support/nushell"
+
+# ~/.config/nushell が存在するか確認
+if [ ! -d "$CANONICAL" ]; then
+  echo "[chezmoi] $CANONICAL does not exist yet, skipping symlink"
+  exit 0
+fi
+
+# macOS の Nushell config ディレクトリが既にシンボリックリンクなら何もしない
+if [ -L "$MACOS_DIR" ]; then
+  echo "[chezmoi] Symlink already exists: $MACOS_DIR"
+  exit 0
+fi
+
+# 実ディレクトリが既にある場合はバックアップしてから作成
+if [ -d "$MACOS_DIR" ]; then
+  BACKUP="${MACOS_DIR}.bak.$(date +%Y%m%d%H%M%S)"
+  echo "[chezmoi] Backing up existing $MACOS_DIR to $BACKUP"
+  mv "$MACOS_DIR" "$BACKUP"
+fi
+
+mkdir -p "$(dirname "$MACOS_DIR")"
+ln -s "$CANONICAL" "$MACOS_DIR"
+echo "[chezmoi] Created symlink: $MACOS_DIR -> $CANONICAL"
+{{ end -}}

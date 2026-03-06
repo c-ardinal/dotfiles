@@ -1,0 +1,49 @@
+{{ if ne .chezmoi.os "windows" -}}
+#!/bin/sh
+# Oh My Posh init.nu generator for macOS/Linux
+# chezmoi run_once: 初回 apply 時に oh-my-posh.nu を自動生成する
+
+set -e
+
+OMP_BIN=""
+if command -v oh-my-posh >/dev/null 2>&1; then
+  OMP_BIN="oh-my-posh"
+elif [ -f "$HOME/.local/bin/oh-my-posh" ]; then
+  OMP_BIN="$HOME/.local/bin/oh-my-posh"
+fi
+
+if [ -z "$OMP_BIN" ]; then
+  echo "[chezmoi] oh-my-posh not found, skipping init.nu generation"
+  echo "[chezmoi] Install with: curl -s https://ohmyposh.dev/install.sh | bash -s"
+  exit 0
+fi
+
+CONFIG_PATH="$HOME/.config/oh-my-posh.json"
+if [ ! -f "$CONFIG_PATH" ]; then
+  echo "[chezmoi] oh-my-posh config not found at $CONFIG_PATH, skipping"
+  exit 0
+fi
+
+# Nushell config dir varies by OS
+if [ "$(uname)" = "Darwin" ]; then
+  NU_CONFIG_DIR="$HOME/Library/Application Support/nushell"
+else
+  NU_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nushell"
+fi
+
+OUTPUT_DIR="$NU_CONFIG_DIR/vendor/autoload"
+OUTPUT_FILE="$OUTPUT_DIR/oh-my-posh.nu"
+
+mkdir -p "$OUTPUT_DIR"
+
+# Generate init script with correct absolute paths for this machine
+RAW=$($OMP_BIN init nu --config "$CONFIG_PATH" --print)
+
+# Inject POSH_THEME at the top
+CONFIG_SAFE=$(echo "$CONFIG_PATH" | sed 's/\\/\//g')
+INIT_SCRIPT="\$env.POSH_THEME = \"$CONFIG_SAFE\"
+$RAW"
+
+echo "$INIT_SCRIPT" > "$OUTPUT_FILE"
+echo "[chezmoi] Generated $OUTPUT_FILE"
+{{ end -}}

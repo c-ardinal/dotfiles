@@ -1,0 +1,17 @@
+# ==========================================
+# chezmoi OS-specific ignore rules
+# ==========================================
+# chezmoi テンプレートにより、現在のOSに不要なファイルを除外する。
+# パターンは target パスに対してマッチする (.gitignore 構文)。
+
+# --- Windows 以外では不要 ---
+{{ if ne .chezmoi.os "windows" }}
+AppData
+bootstrap.ps1
+{{ end }}
+
+# --- Windows では不要 ---
+{{ if eq .chezmoi.os "windows" }}
+.config/nushell
+bootstrap.sh
+{{ end }}
