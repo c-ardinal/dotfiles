@@ -31,10 +31,21 @@ def install_apps [] {
         }
     } else if $os == 'macos' {
         print "📦 macOSパッケージ (Homebrew) を確認中..."
-        # 今後の拡張用 (brew install wezterm oh-my-posh 等)
-        print "※ まだmacOSの自動インストールは完全に定義されていません"
+        let brew_apps = [
+            { cmd: 'wezterm', formula: 'wezterm' }
+            { cmd: 'oh-my-posh', formula: 'oh-my-posh' }
+        ]
+        for app in $brew_apps {
+            let check = (which $app.cmd)
+            if ($check | is-empty) {
+                print $"📥 brew install ($app.formula)..."
+                brew install $app.formula
+            } else {
+                print $"✨ ($app.cmd) は既にインストールされています。"
+            }
+        }
     } else if $os == 'linux' {
-        print "📦 Linux環境です。手動で必要なパッケージを入れるか、将来的こに追加してください"
+        print "📦 Linux環境です。手動で必要なパッケージを入れるか、将来的に追加してください"
     }
 
     # 共通処理: nu_scripts のクローン
@@ -62,7 +73,42 @@ def apply_env [] {
     print "⚙️ chezmoi apply を実行中..."
     chezmoi apply --force
 
+    # Oh My Posh init.nu を生成 (macOS/Linux)
+    if $os != 'windows' {
+        generate_omp_init
+    }
+
     print "✅ Apply が完了しました！"
+}
+
+# Oh My Posh init.nu を生成して Nushell vendor/autoload に配置
+def generate_omp_init [] {
+    let omp_check = (which oh-my-posh)
+    if ($omp_check | is-empty) {
+        print "⚠️  oh-my-posh が見つかりません。スキップします。"
+        return
+    }
+
+    let config_path = ("~/.config/oh-my-posh.json" | path expand)
+    if not ($config_path | path exists) {
+        print $"⚠️  OMP 設定ファイルが見つかりません: ($config_path)"
+        return
+    }
+
+    # Nushell config ディレクトリを特定
+    let nu_config_dir = $nu.default-config-dir
+    let output_dir = ($nu_config_dir | path join "vendor" "autoload")
+    let output_file = ($output_dir | path join "oh-my-posh.nu")
+
+    mkdir $output_dir
+
+    print $"⚙️ oh-my-posh init.nu を生成しています..."
+    let config_safe = ($config_path | str replace --all '\' '/')
+    let raw_script = (oh-my-posh init nu --config $config_path --print)
+    let init_script = $'$env.POSH_THEME = "($config_safe)"' + "\n" + $raw_script
+
+    $init_script | save -f $output_file
+    print $"✅ Oh My Posh init.nu を生成しました: ($output_file)"
 }
 
 def collect_env [] {
