@@ -12,11 +12,16 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 # 2. 依存ツールのインストール
-# formula名とCLIバイナリ名が異なるものがあるためマッピング
-declare -A bin_map=( ["chezmoi"]="chezmoi" ["nushell"]="nu" ["git"]="git" )
+# formula名 → CLIバイナリ名のマッピング (Bash 3.2 互換: case文で実装)
+get_bin_name() {
+    case "$1" in
+        nushell) echo "nu" ;;
+        *)       echo "$1" ;;
+    esac
+}
 
 for formula in chezmoi nushell git; do
-    bin="${bin_map[$formula]}"
+    bin="$(get_bin_name "$formula")"
     if command -v "$bin" >/dev/null 2>&1; then
         echo "✅ $formula ($bin) は既にインストール済みです"
     else
