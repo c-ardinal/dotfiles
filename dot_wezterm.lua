@@ -7,13 +7,18 @@
 local wezterm = require 'wezterm'
 local config = wezterm.config_builder()
 
+-- OS判定ヘルパー (wezterm.target_triple によるランタイム判定)
+local is_windows = wezterm.target_triple:find('windows') ~= nil
+local is_macos   = wezterm.target_triple:find('apple')   ~= nil
+local is_linux   = (not is_windows) and (not is_macos)
+
 -- ==========================================
 -- 1. 基本設定 (Basic Settings)
 -- ==========================================
 -- フォント設定(英語フォント + 日本語フォントのフォールバック)
 config.font = wezterm.font_with_fallback({
   'JetBrains Mono',
-  'Meiryo',
+  is_macos and 'Hiragino Sans' or 'Meiryo',  -- macOS: ヒラギノ, Windows: メイリオ
 })
 config.font_size = 10.0
 -- 日本語入力(IME)を有効化
@@ -24,8 +29,8 @@ config.status_update_interval = 100
 config.default_prog = { 'nu' }
 -- カーソルを点滅する縦線に設定
 config.default_cursor_style = "BlinkingBar"
--- 起動時のカレントディレクトリを /_Workspace に設定
-config.default_cwd = "/_Workspace"
+-- 起動時のカレントディレクトリ (OS別)
+config.default_cwd = is_windows and '/_Workspace' or (wezterm.home_dir .. '/workspace')
 -- スクロールバックバッファを増量 (デフォルト3500行)
 config.scrollback_lines = 10000
 -- ペイン切替時にズーム状態を自動解除
@@ -339,7 +344,7 @@ config.window_background_opacity = 0.9
 -- 30秒ごとの定期保存で終了直前の状態も捕捉する。
 
 local layout_file = wezterm.home_dir .. '/.wezterm_layout.json'
-local DEFAULT_CWD = '/_Workspace'
+local DEFAULT_CWD = is_windows and '/_Workspace' or (wezterm.home_dir .. '/workspace')
 
 -- ペイン座標リストからバイナリツリーを再帰的に構築
 -- ※ panes_with_info() の left, top, width, height から分割方向・比率を逆算する
@@ -351,7 +356,7 @@ local function build_pane_tree(panes_info, bounds)
     local p = panes_info[1]
     local cwd_url = p.pane:get_current_working_dir()
     local cwd = cwd_url and cwd_url.file_path or nil
-    if cwd then cwd = cwd:gsub('^/(%a):', '%1:') end  -- Windows パス修正: /C: → C:
+    if cwd and is_windows then cwd = cwd:gsub('^/(%a):', '%1:') end  -- Windows パス修正: /C: → C:
     return { cwd = cwd or DEFAULT_CWD }
   end
 
@@ -414,7 +419,7 @@ local function build_pane_tree(panes_info, bounds)
   -- フォールバック: 単一ペインとして返す
   local cwd_url = first.pane:get_current_working_dir()
   local cwd = cwd_url and cwd_url.file_path or nil
-  if cwd then cwd = cwd:gsub('^/(%a):', '%1:') end
+  if cwd and is_windows then cwd = cwd:gsub('^/(%a):', '%1:') end
   return { cwd = cwd or DEFAULT_CWD }
 end
 
