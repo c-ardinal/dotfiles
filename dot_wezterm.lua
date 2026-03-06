@@ -26,7 +26,26 @@ config.use_ime = true
 -- Leaderキーなどを押したときに即座にステータスバー(右上のインジケータ等)へ反映させるための更新頻度設定
 config.status_update_interval = 100
 -- デフォルトシェルを NuShell に設定
-config.default_prog = { 'nu' }
+-- macOS の GUI アプリは PATH が最小限 (/usr/bin:/bin 等) なので、フルパスで指定する
+if is_windows then
+  config.default_prog = { 'nu' }
+else
+  local nu_candidates = {
+    wezterm.home_dir .. '/.local/bin/nu',
+    '/opt/homebrew/bin/nu',   -- macOS (Apple Silicon) Homebrew
+    '/usr/local/bin/nu',      -- macOS (Intel) Homebrew / Linux
+    '/usr/bin/nu',            -- Linux パッケージマネージャ
+  }
+  for _, path in ipairs(nu_candidates) do
+    local f = io.open(path, 'r')
+    if f then
+      f:close()
+      config.default_prog = { path }
+      break
+    end
+  end
+  -- 見つからない場合は default_prog を設定せず、システムデフォルトシェルを使用
+end
 -- カーソルを点滅する縦線に設定
 config.default_cursor_style = "BlinkingBar"
 -- 起動時のカレントディレクトリ (OS別)
